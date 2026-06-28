@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Vail / SE Tucson — Development Map</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<style>
+  html, body { margin:0; padding:0; height:100%; }
+  #map { position:absolute; top:0; bottom:0; left:0; right:0; }
+  .titlebar {
+    position:absolute; top:10px; left:50px; z-index:1000;
+    background:#1F3A5F; color:#fff; padding:8px 14px; border-radius:6px;
+    font-family:Georgia, serif; font-size:15px; font-weight:bold;
+    box-shadow:0 1px 4px rgba(0,0,0,.3); max-width:70%;
+  }
+  .titlebar small { display:block; font-weight:normal; font-size:11px; color:#cdd8e6; font-family:Arial, sans-serif; margin-top:2px; }
+  .legend {
+    background:#fff; padding:10px 12px; border-radius:6px; line-height:1.5;
+    font-family:Arial, sans-serif; font-size:12px; color:#222;
+    box-shadow:0 1px 5px rgba(0,0,0,.3); max-width:240px;
+  }
+  .legend h4 { margin:0 0 6px; font-size:12px; color:#1F3A5F; text-transform:uppercase; letter-spacing:.4px; }
+  .legend .row { display:flex; align-items:center; margin:3px 0; }
+  .legend .dot { width:14px; height:14px; border-radius:50%; margin-right:8px; flex:0 0 auto; border:1px solid rgba(0,0,0,.35); }
+  .legend .star { width:16px; height:16px; margin-right:6px; flex:0 0 auto; color:#D4A017; font-size:16px; line-height:14px; text-align:center; }
+  .legend .note { margin-top:7px; font-size:10.5px; color:#666; border-top:1px solid #eee; padding-top:6px; }
+  .leaflet-popup-content { font-family:Arial, sans-serif; font-size:12.5px; line-height:1.45; }
+  .leaflet-popup-content b { color:#1F3A5F; }
+  .pop-tag { display:inline-block; font-size:10px; font-weight:bold; color:#fff; padding:1px 6px; border-radius:3px; margin-top:3px; }
+  .subject-icon { color:#D4A017; font-size:30px; text-shadow:0 0 3px #000,0 0 3px #000; text-align:center; line-height:30px; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="titlebar">Vail / SE Tucson — Development Map
+  <small>Shantos Property vs. corridor master plans, comps &amp; competing supply · toggle Street/Satellite top-right</small>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const CATS = {
+  subject:   { color:"#D4A017", label:"Shantos Property" },
+  custom:    { color:"#2E8B57", label:"Custom / estate 1-acre (target segment & comps)" },
+  developer: { color:"#2563EB", label:"Developer / master-plan (whole-package buyer)" },
+  production:{ color:"#DC2626", label:"Production builder (40-60 ft lots only)" },
+};
+
+const PLACES = [
+  { name:"Shantos Property", cat:"subject", lat:31.9843412, lng:-110.6879017 },
+
+  { name:"Coyote Creek", cat:"custom", lat:32.0909658, lng:-110.6714922 },
+  { name:"Mountain View Ranch (Mattamy)", cat:"custom", lat:32.003444, lng:-110.674588 },
+  { name:"Jacaranda Villages at Tewa Trail", cat:"custom", lat:32.0877901, lng:-110.7115015 },
+  { name:"Rincon Desert Estates", cat:"custom", lat:32.1062767, lng:-110.6906421 },
+
+  { name:"Rocking K (Diamond Ventures)", cat:"developer", lat:32.109497, lng:-110.7070159 },
+  { name:"Andrada (Diamond Ventures)", cat:"developer", lat:31.9905559, lng:-110.7811778 },
+  { name:"Rita Ranch (Cottonwood Properties)", cat:"developer", lat:32.1064283, lng:-110.7846031 },
+
+  { name:"Sycamore Vista (D.R. Horton)", cat:"production", lat:31.942477, lng:-110.789167 },
+  { name:"Rancho del Lago", cat:"production", lat:32.0664302, lng:-110.7057492 },
+];
+
+// Tile providers chosen to work even when the file is opened directly off disk
+// (OpenStreetMap's servers block no-referer requests; Esri/CARTO do not).
+const street = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
+  maxZoom:19, attribution:"Tiles © Esri"
+});
+const topo = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}", {
+  maxZoom:19, attribution:"Tiles © Esri"
+});
+const satellite = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+  maxZoom:19, attribution:"Imagery © Esri"
+});
+const cartoStreet = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png", {
+  maxZoom:20, subdomains:"abcd", attribution:"© OpenStreetMap, © CARTO"
+});
+
+const map = L.map("map", { layers:[street] });
+L.control.layers(
+  { "Street (Esri)":street, "Terrain / Topo":topo, "Satellite":satellite, "Street (CARTO)":cartoStreet },
+  null, { position:"topright" }
+).addTo(map);
+
+const bounds = [];
+PLACES.forEach(p => {
+  bounds.push([p.lat, p.lng]);
+  const c = CATS[p.cat];
+  const popup = (p.cat === "subject")
+    ? `<b>${p.name}</b>`
+    : `<b>${p.name}</b><br><span class="pop-tag" style="background:${c.color}">${c.label}</span>`;
+
+  let marker;
+  if (p.cat === "subject") {
+    marker = L.marker([p.lat, p.lng], {
+      icon: L.divIcon({ className:"", html:'<div class="subject-icon">★</div>',
+                        iconSize:[30,30], iconAnchor:[15,15] }),
+      zIndexOffset:1000
+    });
+  } else {
+    marker = L.circleMarker([p.lat, p.lng], {
+      radius:9, color:"#222", weight:1, fillColor:c.color, fillOpacity:0.9
+    });
+  }
+  marker.addTo(map).bindPopup(popup);
+});
+
+map.fitBounds(bounds, { padding:[55,55] });
+
+const legend = L.control({ position:"bottomright" });
+legend.onAdd = function() {
+  const div = L.DomUtil.create("div", "legend");
+  let html = "<h4>Development type</h4>";
+  html += `<div class="row"><div class="star">★</div><div>${CATS.subject.label}</div></div>`;
+  ["custom","developer","production"].forEach(k => {
+    html += `<div class="row"><span class="dot" style="background:${CATS[k].color}"></span><div>${CATS[k].label}</div></div>`;
+  });
+  html += '<div class="note">Pins are approximate. Shantos Property shown at the Davidson Rd centroid.</div>';
+  div.innerHTML = html;
+  return div;
+};
+legend.addTo(map);
+</script>
+</body>
+</html>
